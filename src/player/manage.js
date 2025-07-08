@@ -1,3 +1,5 @@
+process.env.YTDL_NO_UPDATE = "1";
+
 import ytdl from "@distube/ytdl-core";
 import {
   joinVoiceChannel,
