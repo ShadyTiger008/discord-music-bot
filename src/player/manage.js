@@ -32,7 +32,6 @@ export async function playAudio(message, url) {
         author: item.author.name,
         duration: item.duration || 0
       }));
-      console.log("new songs", newSongs)
 
       console.log(
         `📃 Playlist loaded: ${response.title} (${newSongs.length} songs)`

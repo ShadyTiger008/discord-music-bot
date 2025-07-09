@@ -1,6 +1,8 @@
 import { queue } from "../player/queue.js";
 import { pause } from "./pause.js";
 import { play } from "./play.js";
+import { queueCheck } from "./queueCheck.js";
+import { queuePlay } from "./queuePlay.js";
 import { resume } from "./resume.js";
 import { skip } from "./skip.js";
 import { stop } from "./stop.js";
@@ -38,6 +40,12 @@ export async function handleCommand(message) {
       break;
     case "volume":
       setVolume(message, serverQueue, args);
+      break;
+    case "queue":
+      queueCheck(message, serverQueue);
+      break;
+    case "goto":
+      queuePlay(message, serverQueue, args);
       break;
 
     default:
