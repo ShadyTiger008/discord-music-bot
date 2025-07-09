@@ -57,9 +57,9 @@ export async function playAudio(message, url) {
 
     // If there's already a queue, add songs to it
     if (serverQueue) {
-      console.log("new songs", newSongs)
+      // console.log("new songs", newSongs)
       serverQueue.songs.push(...newSongs);
-      console.log("server queue", serverQueue)
+      // console.log("server queue", serverQueue)
 
       const replyMessage = isPlaylist
         ? `📃 **Playlist added to queue:**\n**${
@@ -194,7 +194,7 @@ async function playNextSong(serverQueue) {
     serverQueue.textChannel.send(
       `🎵 **Now playing:**\n**${nextSong.title}**\n👤 *${
         nextSong.author
-      }*\n⏱️ *${formatDuration(nextSong.duration)}*`
+      }*\n⏱️ *${(nextSong.duration)}*`
     );
   } catch (error) {
     console.error(`❌ Error playing next song: ${error.message}`);
