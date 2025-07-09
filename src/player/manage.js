@@ -19,23 +19,20 @@ export async function playAudio(message, url) {
   const serverQueue = queue.get(message.guild.id);
 
   try {
-    console.log("-------------url----------------", url);
     const isPlaylist = url.includes("playlist");
-    console.log("------------isPlaylist-----------", isPlaylist);
 
     let newSongs = [];
 
     if (isPlaylist) {
       const response = await ytpl(url);
-      console.log("youtube playlist response", response);
-
       // Convert playlist items to song objects
       newSongs = response.items.map((item) => ({
         url: item.url,
         title: item.title,
         author: item.author.name,
-        duration: item.durationSec || 0
+        duration: item.duration || 0
       }));
+      console.log("new songs", newSongs)
 
       console.log(
         `📃 Playlist loaded: ${response.title} (${newSongs.length} songs)`
@@ -61,7 +58,9 @@ export async function playAudio(message, url) {
 
     // If there's already a queue, add songs to it
     if (serverQueue) {
+      console.log("new songs", newSongs)
       serverQueue.songs.push(...newSongs);
+      console.log("server queue", serverQueue)
 
       const replyMessage = isPlaylist
         ? `📃 **Playlist added to queue:**\n**${
@@ -125,7 +124,7 @@ export async function playAudio(message, url) {
           newSongs.length
         } songs**\n🎵 **Now playing:**\n**${currentSong.title}**\n👤 *${
           currentSong.author
-        }*\n⏱️ *${formatDuration(currentSong.duration)}*\n🔊 *Volume: 100%*`
+        }*\n⏱️ *${currentSong.duration}*\n🔊 *Volume: 100%*`
       : `🎵 **Now playing:**\n**${currentSong.title}**\n👤 *${
           currentSong.author
         }*\n⏱️ *${formatDuration(currentSong.duration)}*\n🔊 *Volume: 100%*`;
