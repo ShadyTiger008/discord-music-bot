@@ -4,6 +4,7 @@ import { play } from "./play.js";
 import { queueCheck } from "./queueCheck.js";
 import { queuePlay } from "./queuePlay.js";
 import { resume } from "./resume.js";
+import { searchWithKey } from "./search.js";
 import { skip } from "./skip.js";
 import { stop } from "./stop.js";
 import { setVolume } from "./volume.js";
@@ -46,6 +47,9 @@ export async function handleCommand(message) {
       break;
     case "goto":
       queuePlay(message, serverQueue, args);
+      break;
+    case "search":
+      searchWithKey(message, args);
       break;
 
     default:
