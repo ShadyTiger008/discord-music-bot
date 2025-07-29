@@ -5,5 +5,7 @@ import { handleCommand } from "../commands/index.js";
 export default async function messageCreate(message) {
   if (message.author.bot || !message.content.startsWith(BOT_PREFIX)) return;
 
+  console.log("---------message---------",message)
+
   await handleCommand(message);
 }

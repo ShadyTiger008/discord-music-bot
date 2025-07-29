@@ -1,6 +1,4 @@
 import { EmbedBuilder, Message } from "discord.js";
-import { BOT_PREFIX } from "../config.js";
-import { handleCommand } from "../commands/index.js";
 
 export default async function interactionCreate(interaction) {
   const helpEmbed = new EmbedBuilder()

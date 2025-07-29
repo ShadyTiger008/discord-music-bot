@@ -2,3 +2,5 @@
 2. Play anything feature
   Get mood from user and other things to know about user likings
 3. Store the users data for better recommendation and show history features
+4. Option to play song by providing spotify url for a music
+5. Favorites feature
