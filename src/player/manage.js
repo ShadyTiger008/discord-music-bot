@@ -1,5 +1,3 @@
-process.env.YTDL_NO_UPDATE = "1";
-
 import ytdl from "@distube/ytdl-core";
 import {
   joinVoiceChannel,
@@ -7,198 +5,178 @@ import {
   createAudioResource,
   AudioPlayerStatus,
   entersState,
-  VoiceConnectionStatus
+  VoiceConnectionStatus,
+  StreamType
 } from "@discordjs/voice";
 import { queue } from "./queue.js";
 import ytpl from "@distube/ytpl";
+import { logger } from "../utils/logger.js";
+import { formatDuration, createMusicEmbed } from "../utils/formatters.js";
+import { config } from "../config/index.js";
 
-export async function playAudio(message, url) {
-  const voiceChannel = message.member?.voice?.channel;
-  if (!voiceChannel) return message.reply("Join a voice channel first!");
+/**
+ * Plays audio in a voice channel
+ * @param {Object} context - Unified context or message shim
+ * @param {string} url - YouTube URL
+ */
+export async function playAudio(context, url) {
+  const { member, guild, channel } = context;
+  const voiceChannel = member?.voice?.channel;
 
-  const serverQueue = queue.get(message.guild.id);
+  if (!voiceChannel) {
+    return context.reply("❌ You need to be in a voice channel to play music!");
+  }
+
+  const permissions = voiceChannel.permissionsFor(context.client.user);
+  if (!permissions.has("Connect") || !permissions.has("Speak")) {
+    return context.reply("❌ I don't have permission to join and speak in your voice channel!");
+  }
+
+  let serverQueue = queue.get(guild.id);
 
   try {
-    const isPlaylist = url.includes("playlist");
-
+    const isPlaylist = ytpl.validateID(url);
     let newSongs = [];
 
     if (isPlaylist) {
-      const response = await ytpl(url);
-      // Convert playlist items to song objects
-      newSongs = response.items.map((item) => ({
-        url: item.url,
+      const response = await ytpl(url, { limit: 100 });
+      newSongs = response.items.map(item => ({
+        url: item.shortUrl || item.url,
         title: item.title,
         author: item.author.name,
-        duration: item.duration || 0
+        duration: item.durationSec || 0,
+        thumbnail: item.bestThumbnail.url
       }));
-
-      console.log(
-        `📃 Playlist loaded: ${response.title} (${newSongs.length} songs)`
-      );
+      logger.info(`Playlist loaded: ${response.title} (${newSongs.length} songs) in ${guild.name}`);
     } else {
-      // Get video info for single video
       const info = await ytdl.getInfo(url);
-      const newSong = {
+      newSongs = [{
         url: url,
         title: info.videoDetails.title,
         author: info.videoDetails.author.name,
-        duration: parseInt(info.videoDetails.lengthSeconds)
-      };
-      newSongs = [newSong];
+        duration: parseInt(info.videoDetails.lengthSeconds),
+        thumbnail: info.videoDetails.thumbnails[0].url
+      }];
     }
 
-    // Format duration from seconds to mm:ss
-    const formatDuration = (seconds) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}:${secs.toString().padStart(2, "0")}`;
-    };
-
-    // If there's already a queue, add songs to it
     if (serverQueue) {
-      // console.log("new songs", newSongs)
       serverQueue.songs.push(...newSongs);
-      // console.log("server queue", serverQueue)
-
-      const replyMessage = isPlaylist
-        ? `📃 **Playlist added to queue:**\n**${
-            newSongs.length
-          } songs**\n🎵 **Total in queue:** ${
-            serverQueue.songs.length - serverQueue.currentIndex - 1
-          } songs`
-        : `➕ **Added to queue:**\n**${newSongs[0].title}**\n👤 *${
-            newSongs[0].author
-          }*\n⏱️ *${formatDuration(
-            newSongs[0].duration
-          )}*\n🎵 **Position in queue:** ${
-            serverQueue.songs.length - serverQueue.currentIndex
-          }`;
-
-      return message.reply(replyMessage);
+      const embed = createMusicEmbed(
+        isPlaylist ? "📃 Playlist Added" : "➕ Song Added",
+        `**[${newSongs[0].title}](${newSongs[0].url})**\n` +
+        `Added **${newSongs.length}** song(s) to the queue.\n` +
+        `Position: **${serverQueue.songs.length - serverQueue.currentIndex - 1}**`
+      ).setThumbnail(newSongs[0].thumbnail);
+      
+      return context.reply({ embeds: [embed] });
     }
 
-    // No existing queue, create new connection and start playing
     const connection = joinVoiceChannel({
       channelId: voiceChannel.id,
-      guildId: message.guild.id,
-      adapterCreator: message.guild.voiceAdapterCreator
+      guildId: guild.id,
+      adapterCreator: guild.voiceAdapterCreator
     });
 
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-
-    const currentSong = newSongs[0];
-    console.log(
-      `🎵 Playing: ${currentSong.title} by ${
-        currentSong.author
-      } (${formatDuration(currentSong.duration)}) in ${voiceChannel.name}`
-    );
-
-    // Create audio stream and resource for the current song
-    const stream = ytdl(currentSong.url, {
-      filter: "audioonly",
-      highWaterMark: 1 << 25
-    });
-    const resource = createAudioResource(stream);
-
-    const player = createAudioPlayer();
-    player.play(resource);
-
-    connection.subscribe(player);
-
-    // Store queue information
-    queue.set(message.guild.id, {
+    serverQueue = {
       connection,
-      player,
+      player: createAudioPlayer(),
       songs: newSongs,
       currentIndex: 0,
       volume: 1,
-      textChannel: message.channel,
-      voiceChannel
-    });
+      textChannel: channel,
+      voiceChannel: voiceChannel,
+      resource: null
+    };
 
-    // Detailed reply message
-    const replyMessage = isPlaylist
-      ? `📃 **Playlist added:**\n**${
-          newSongs.length
-        } songs**\n🎵 **Now playing:**\n**${currentSong.title}**\n👤 *${
-          currentSong.author
-        }*\n⏱️ *${currentSong.duration}*\n🔊 *Volume: 100%*`
-      : `🎵 **Now playing:**\n**${currentSong.title}**\n👤 *${
-          currentSong.author
-        }*\n⏱️ *${formatDuration(currentSong.duration)}*\n🔊 *Volume: 100%*`;
+    queue.set(guild.id, serverQueue);
+    connection.subscribe(serverQueue.player);
 
-    message.reply(replyMessage);
+    setupPlayerListeners(guild.id);
+    setupConnectionListeners(guild.id);
 
-    // Handle player events
-    player.on(AudioPlayerStatus.Playing, () => {
-      console.log(`▶️ Audio player started playing: ${currentSong.title}`);
-    });
+    await playNextSong(serverQueue);
 
-    player.on(AudioPlayerStatus.Idle, () => {
-      console.log(`⏹️ Audio player finished playing: ${currentSong.title}`);
-
-      const serverQueue = queue.get(message.guild.id);
-      if (serverQueue) {
-        playNextSong(serverQueue);
-      }
-    });
-
-    player.on("error", (error) => {
-      console.error(`❌ Audio player error: ${error.message}`);
-      message.reply("❌ An error occurred while playing the audio.");
-      connection.destroy();
-      queue.delete(message.guild.id);
-    });
   } catch (error) {
-    console.error(`❌ Error playing audio: ${error.message}`);
-    message.reply("❌ Failed to play the audio. Please try again.");
+    logger.error("Error in playAudio:", error);
+    context.reply(`❌ Failed to play: ${error.message}`);
+    if (!serverQueue) queue.delete(guild.id);
   }
 }
 
-// Function to play the next song in queue
-async function playNextSong(serverQueue) {
-  serverQueue.currentIndex++;
+function setupPlayerListeners(guildId) {
+  const serverQueue = queue.get(guildId);
+  if (!serverQueue) return;
 
+  serverQueue.player.on(AudioPlayerStatus.Idle, () => {
+    logger.debug(`Player idle in ${guildId}, playing next...`);
+    playNextSong(serverQueue);
+  });
+
+  serverQueue.player.on("error", error => {
+    logger.error(`Audio player error in ${guildId}:`, error);
+    serverQueue.textChannel.send("❌ An error occurred during playback. Skipping to next song...");
+    playNextSong(serverQueue);
+  });
+}
+
+function setupConnectionListeners(guildId) {
+  const serverQueue = queue.get(guildId);
+  if (!serverQueue) return;
+
+  serverQueue.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+    try {
+      await Promise.race([
+        entersState(serverQueue.connection, VoiceConnectionStatus.Signalling, 5_000),
+        entersState(serverQueue.connection, VoiceConnectionStatus.Connecting, 5_000),
+      ]);
+    } catch (error) {
+      logger.warn(`Disconnected from ${guildId}, cleaning up.`);
+      serverQueue.connection.destroy();
+      queue.delete(guildId);
+    }
+  });
+}
+
+async function playNextSong(serverQueue) {
   if (serverQueue.currentIndex >= serverQueue.songs.length) {
-    // No more songs, disconnect
-    console.log("📭 Queue ended, disconnecting...");
+    logger.info(`Queue finished in ${serverQueue.textChannel.guild.name}`);
+    serverQueue.textChannel.send("📭 Queue ended. Leaving voice channel.");
     serverQueue.connection.destroy();
     queue.delete(serverQueue.textChannel.guild.id);
-    serverQueue.textChannel.send(
-      "📭 Queue ended. Disconnected from voice channel."
-    );
     return;
   }
 
-  const nextSong = serverQueue.songs[serverQueue.currentIndex];
-
+  const song = serverQueue.songs[serverQueue.currentIndex];
+  
   try {
-    console.log(`🎵 Playing next: ${nextSong.title}`);
-
-    const stream = ytdl(nextSong.url, {
-      filter: "audioonly",
-      highWaterMark: 1 << 25
+    const stream = ytdl(song.url, {
+      ...config.ytdlOptions,
+      agent: undefined // Can add proxy agent here if needed for production
     });
-    const resource = createAudioResource(stream);
 
+    const resource = createAudioResource(stream, {
+      inlineVolume: true,
+      inputType: StreamType.Arbitrary
+    });
+
+    resource.volume.setVolume(serverQueue.volume);
+    serverQueue.resource = resource;
     serverQueue.player.play(resource);
 
-    // Format duration
-    const formatDuration = (seconds) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}:${secs.toString().padStart(2, "0")}`;
-    };
+    const embed = createMusicEmbed(
+      "🎶 Now Playing",
+      `**[${song.title}](${song.url})**\n` +
+      `Author: \`${song.author}\`\n` +
+      `Duration: \`${formatDuration(song.duration)}\``
+    ).setThumbnail(song.thumbnail);
 
-    serverQueue.textChannel.send(
-      `🎵 **Now playing:**\n**${nextSong.title}**\n👤 *${
-        nextSong.author
-      }*\n⏱️ *${(nextSong.duration)}*`
-    );
+    serverQueue.textChannel.send({ embeds: [embed] });
+    serverQueue.currentIndex++;
+
   } catch (error) {
-    console.error(`❌ Error playing next song: ${error.message}`);
-    serverQueue.textChannel.send("❌ Error playing next song, skipping...");
-    playNextSong(serverQueue); // Try next song
+    logger.error(`Error playing ${song.title}:`, error);
+    serverQueue.textChannel.send(`❌ Error playing **${song.title}**, skipping...`);
+    serverQueue.currentIndex++;
+    playNextSong(serverQueue);
   }
 }

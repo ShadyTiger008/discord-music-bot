@@ -5,20 +5,24 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node --env-file=.env src/index.js",
-    "dev": "nodemon --env-file=.env src/index.js",
-    "build:command": "node --env-file=.env src/command.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "build:command": "node scripts/deploy-commands.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Production-grade Discord Music Bot",
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.18.0",
     "@distube/ytdl-core": "^4.16.12",
     "@distube/ytpl": "^1.2.3",
     "discord.js": "^14.21.0",
+    "dotenv": "^16.4.5",
     "yt-search": "^2.13.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
